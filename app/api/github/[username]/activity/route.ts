@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server"
-import { getSessionUser } from "@/lib/session"
 import { github } from "@/lib/github"
 
 const ghHeaders: Record<string, string> = {
@@ -32,9 +31,6 @@ export async function GET(
   _req: NextRequest,
   { params }: { params: Promise<{ username: string }> }
 ) {
-  const sessionUser = await getSessionUser()
-  if (!sessionUser) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-
   const { username } = await params
 
   try {

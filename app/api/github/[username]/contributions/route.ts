@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server"
-import { getSessionUser } from "@/lib/session"
 
 interface Contribution {
   date: string
@@ -17,9 +16,6 @@ export async function GET(
   _req: NextRequest,
   { params }: { params: Promise<{ username: string }> }
 ) {
-  const sessionUser = await getSessionUser()
-  if (!sessionUser) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-
   const { username } = await params
 
   try {

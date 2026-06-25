@@ -80,13 +80,15 @@ const LEVEL_COLORS = ["bg-muted/60","bg-foreground/20","bg-foreground/40","bg-fo
 
 function MiniHeatmap({ username }: { username: string }) {
   const [data, setData] = useState<Contribution[]>([])
+  const [total, setTotal] = useState(0)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     fetch(`/api/github/${username}/contributions`)
       .then(r => r.json())
-      .then((d: { contributions?: Contribution[] }) => {
+      .then((d: { contributions?: Contribution[]; total?: Record<string, number> }) => {
         if (d.contributions) setData(d.contributions)
+        if (d.total?.lastYear) setTotal(d.total.lastYear)
       })
       .catch(() => null)
       .finally(() => setLoading(false))
@@ -107,22 +109,29 @@ function MiniHeatmap({ username }: { username: string }) {
   for (let i = 0; i < cells.length; i += 7) weeks.push(cells.slice(i, i + 7))
 
   return (
-    <div className="flex gap-1.5 overflow-x-auto pb-1">
-      <div className="flex flex-col gap-px pt-5 shrink-0">
-        {["","Mon","","Wed","","Fri",""].map((d,i) => (
-          <div key={i} className="h-[10px] font-mono text-[8px] text-muted-foreground leading-none flex items-center">{d}</div>
-        ))}
+    <>
+      {total > 0 && (
+        <p className="font-mono text-[10px] text-muted-foreground mb-2">
+          {total.toLocaleString()} contributions in the last year
+        </p>
+      )}
+      <div className="flex gap-1.5 overflow-x-auto pb-1">
+        <div className="flex flex-col gap-px pt-5 shrink-0">
+          {["","Mon","","Wed","","Fri",""].map((d,i) => (
+            <div key={i} className="h-[10px] font-mono text-[8px] text-muted-foreground leading-none flex items-center">{d}</div>
+          ))}
+        </div>
+        <div className="flex gap-px">
+          {weeks.map((week, wi) => (
+            <div key={wi} className="flex flex-col gap-px">
+              {week.map((cell, di) => (
+                <div key={di} className={`size-[10px] rounded-[2px] shrink-0 ${cell ? LEVEL_COLORS[cell.level] : "bg-transparent"}`} title={cell ? `${cell.date}: ${cell.count}` : ""}/>
+              ))}
+            </div>
+          ))}
+        </div>
       </div>
-      <div className="flex gap-px">
-        {weeks.map((week, wi) => (
-          <div key={wi} className="flex flex-col gap-px">
-            {week.map((cell, di) => (
-              <div key={di} className={`size-[10px] rounded-[2px] shrink-0 ${cell ? LEVEL_COLORS[cell.level] : "bg-transparent"}`} title={cell ? `${cell.date}: ${cell.count}` : ""}/>
-            ))}
-          </div>
-        ))}
-      </div>
-    </div>
+    </>
   )
 }
 
@@ -281,7 +290,6 @@ export default function ComparePage() {
   const [userA, setUserA] = useState("")
   const [userB, setUserB] = useState("")
   const [submitted, setSubmitted] = useState(false)
-  const [authLoading, setAuthLoading] = useState(true)
 
   const [left, setLeft] = useState<UserData>({
     profile:null,repos:null,activity:[],
@@ -293,10 +301,6 @@ export default function ComparePage() {
     profileLoading:false,reposLoading:false,activityLoading:false,
     profileError:"",reposError:"",activityError:"",
   })
-
-  useEffect(() => {
-    fetch("/api/auth/me").then(r => { if (!r.ok) router.push("/signin") }).finally(() => setAuthLoading(false))
-  }, [router])
 
   async function fetchUser(username: string, side: "left" | "right") {
     const setter = side === "left" ? setLeft : setRight
@@ -346,12 +350,6 @@ export default function ComparePage() {
     setLeft({profile:null,repos:null,activity:[],profileLoading:false,reposLoading:false,activityLoading:false,profileError:"",reposError:"",activityError:""})
     setRight({profile:null,repos:null,activity:[],profileLoading:false,reposLoading:false,activityLoading:false,profileError:"",reposError:"",activityError:""})
   }
-
-  if (authLoading) return (
-    <div className="flex min-h-svh items-center justify-center">
-      <Loader2 className="size-4 animate-spin text-muted-foreground"/>
-    </div>
-  )
 
   if (!submitted) {
     return (
