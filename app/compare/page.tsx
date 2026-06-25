@@ -1,7 +1,9 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
+import ReactMarkdown from "react-markdown"
+import remarkGfm from "remark-gfm"
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -9,10 +11,11 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar"
 import { Separator } from "@/components/ui/separator"
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
 import {
   Star, GitFork, Users, BookOpen, MapPin, Building2, AtSign, Globe,
   Loader2, GitCommitHorizontal, GitPullRequest, AlertCircle,
-  GitBranch, Zap, Crosshair,
+  GitBranch, Zap, Crosshair, RefreshCw, Lightbulb, Flame,
 } from "lucide-react"
 
 interface GHUser {
@@ -161,6 +164,115 @@ function UserProfileCard({ user, repos }: { user: GHUser; repos: ReposData | nul
         <p className="flex items-center gap-1.5"><Star className="size-2.5 shrink-0"/>Member since {joinYear}</p>
       </div>
     </div>
+  )
+}
+
+function MD({ src }: { src: string }) {
+  return (
+    <div className="ai-prose">
+      <ReactMarkdown
+        remarkPlugins={[remarkGfm]}
+        components={{
+          p: ({children}) => <p>{children}</p>,
+          h1: ({children}) => <h1>{children}</h1>,
+          h2: ({children}) => <h2>{children}</h2>,
+          h3: ({children}) => <h3>{children}</h3>,
+          ul: ({children}) => <ul>{children}</ul>,
+          ol: ({children}) => <ol>{children}</ol>,
+          li: ({children}) => <li>{children}</li>,
+          strong: ({children}) => <strong>{children}</strong>,
+          em: ({children}) => <em>{children}</em>,
+          code: ({children}) => <code>{children}</code>,
+          a: ({href,children}) => <a href={href} target="_blank" rel="noreferrer">{children}</a>,
+          blockquote: ({children}) => <blockquote>{children}</blockquote>,
+          table: ({children}) => <div className="table-wrap"><table>{children}</table></div>,
+          thead: ({children}) => <thead>{children}</thead>,
+          tbody: ({children}) => <tbody>{children}</tbody>,
+          tr: ({children}) => <tr>{children}</tr>,
+          th: ({children}) => <th>{children}</th>,
+          td: ({children}) => <td>{children}</td>,
+          hr: () => <hr/>,
+        }}
+      >{src}</ReactMarkdown>
+    </div>
+  )
+}
+
+function AIComparePanel({ usernameA, usernameB }: { usernameA: string; usernameB: string }) {
+  const [tab, setTab] = useState("head2head")
+  const [data, setData] = useState<Record<string, {content:string;loading:boolean;error:string}>>({
+    head2head:{content:"",loading:false,error:""},
+    advice:{content:"",loading:false,error:""},
+    roast:{content:"",loading:false,error:""},
+  })
+  const fired = useRef(false)
+
+  async function gen(type: string) {
+    setData(p => ({...p,[type]:{content:"",loading:true,error:""}}))
+    try {
+      const r = await fetch("/api/ai/compare", {
+        method:"POST",
+        headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({usernameA,usernameB,type}),
+      })
+      const j = await r.json() as {content?:string;error?:string}
+      if (!r.ok) throw new Error(j.error)
+      setData(p => ({...p,[type]:{content:j.content??"",loading:false,error:""}}))
+    } catch(e) {
+      setData(p => ({...p,[type]:{content:"",loading:false,error:e instanceof Error?e.message:"Error"}}))
+    }
+  }
+
+  useEffect(() => {
+    if (fired.current) return; fired.current=true; void gen("head2head")
+  }, [usernameA, usernameB]) // eslint-disable-line
+
+  const tabs = [
+    {key:"head2head", label:"Head-to-Head", icon:<Zap className="size-3"/>},
+    {key:"advice",    label:"Advice",       icon:<Lightbulb className="size-3"/>},
+    {key:"roast",     label:"Roast",        icon:<Flame className="size-3"/>},
+  ]
+
+  return (
+    <Card className="border-border/60">
+      <CardHeader className="pb-2 flex-row items-start justify-between gap-4">
+        <div>
+          <CardTitle className="text-xs font-mono text-muted-foreground uppercase tracking-widest">AI Comparison</CardTitle>
+          <p className="font-mono text-[10px] text-muted-foreground/50 mt-0.5">llama-3.3-70b · Groq</p>
+        </div>
+        <Button variant="ghost" size="icon-sm" onClick={()=>gen(tab)} disabled={data[tab]?.loading} title="Regenerate">
+          <RefreshCw className={`size-3 ${data[tab]?.loading?"animate-spin":""}`}/>
+        </Button>
+      </CardHeader>
+      <CardContent>
+        <Tabs value={tab} onValueChange={v=>{setTab(v);if(!data[v]?.content&&!data[v]?.loading)gen(v)}}>
+          <TabsList className="mb-5 h-8 gap-0.5">
+            {tabs.map(t=>(
+              <TabsTrigger key={t.key} value={t.key} className="font-mono text-xs gap-1.5 h-6 px-3">
+                {t.icon}{t.label}
+              </TabsTrigger>
+            ))}
+          </TabsList>
+          {tabs.map(t=>(
+            <TabsContent key={t.key} value={t.key} className="mt-0">
+              {data[t.key]?.loading ? (
+                <div className="flex items-center gap-2.5 text-xs text-muted-foreground font-mono py-8">
+                  <Loader2 className="size-3.5 animate-spin"/> Composing analysis…
+                </div>
+              ) : data[t.key]?.error ? (
+                <p className="text-xs text-destructive font-mono py-2">{data[t.key]?.error}</p>
+              ) : data[t.key]?.content ? (
+                <MD src={data[t.key]!.content}/>
+              ) : (
+                <Button variant="outline" size="sm" className="font-mono text-xs mt-1" onClick={()=>gen(t.key)}>
+                  Generate {t.label}
+                </Button>
+              )}
+            </TabsContent>
+          ))}
+        </Tabs>
+      </CardContent>
+    </Card>
   )
 }
 
@@ -369,6 +481,9 @@ export default function ComparePage() {
                 </Card>
               </div>
             </div>
+
+            {/* ── AI Comparison ── */}
+            <AIComparePanel usernameA={userA} usernameB={userB}/>
 
             <Separator className="my-2"/>
 
